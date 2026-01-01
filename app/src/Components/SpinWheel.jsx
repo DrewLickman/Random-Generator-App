@@ -3,11 +3,14 @@ import spinningSound from "../Assets/Spinning.mp3";
 
 
 const SpinWheel = () => {
+    // Example items to show when textbox is empty
+    const exampleItems = ['Item 1', 'Item 2', 'Item 3', 'Item 4'];
+
     // States
     const [isSpinning, setIsSpinning] = useState(false);
     const [rotation, setRotation] = useState(0);
-    const [wheelItems, setWheelItems] = useState(['Item 1', 'Item 2', 'Item 3', 'Item 4']);
-    const [inputText, setInputText] = useState('Item 1\nItem 2\nItem 3\nItem 4');
+    const [wheelItems, setWheelItems] = useState(exampleItems);
+    const [inputText, setInputText] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
     const [pointerColor, setPointerColor] = useState('rgb(239, 68, 68)');
 
@@ -55,10 +58,16 @@ const SpinWheel = () => {
     const handleInputChange = (e) => {
         const text = e.target.value;
         setInputText(text);
-        const items = text.split(/[,\n]/)
-            .map(item => item.trim())
-            .filter(item => item.length > 0);
-        setWheelItems(items);
+        
+        // If textbox is empty, use example items; otherwise parse user input
+        if (text.trim().length === 0) {
+            setWheelItems(exampleItems);
+        } else {
+            const items = text.split(/[,\n]/)
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+            setWheelItems(items.length > 0 ? items : exampleItems);
+        }
     };
 
     return (
