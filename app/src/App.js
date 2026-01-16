@@ -4,17 +4,18 @@ import RollDice from './Components/RollDice';
 import DrawCard from './Components/DrawCard';
 import SpinWheel from './Components/SpinWheel';
 import ReelSlots from './Components/ReelSlots';
+import RandomColor from './Components/RandomColor';
 
 function App() {
 	return (
-		<div className="bg-gray-200 flex flex-col xl:h-screen">
+		<div className="bg-gray-200 flex flex-col min-h-screen">
 			<h1 className="text-4xl text-center font-bold my-2 xl:mt-2 ">Are you feeling lucky?</h1>
 			<div className="flex-1 flex flex-col justify-between p-1 space-y-1 xl:grid xl:grid-flow-row xl:grid-cols-3 xl:p-4 xl:space-y-4">
 				<CoinFlip />
 				<RollDice />
 				<DrawCard />
 				<SpinWheel />
-				<span></span>
+				<RandomColor />
 				<ReelSlots />
 			</div>
 

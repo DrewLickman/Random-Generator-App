@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import spinningSound from "../Assets/Spinning.mp3";
 
-
 const SpinWheel = () => {
     // Example items to show when textbox is empty
     const exampleItems = ['Item 1', 'Item 2', 'Item 3', 'Item 4'];
@@ -75,7 +74,7 @@ const SpinWheel = () => {
             <textarea
                 value={inputText}
                 onChange={handleInputChange}
-                className="w-64 h-32 p-2 border rounded resize-none max-w-fit max-h-20"
+                className="w-full max-w-xs h-32 p-2 border rounded resize-none"
                 placeholder="Enter items (separated by commas or new lines)"
             />
 
