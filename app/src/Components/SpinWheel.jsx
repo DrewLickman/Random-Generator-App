@@ -8,10 +8,15 @@ const SpinWheel = () => {
     // States
     const [isSpinning, setIsSpinning] = useState(false);
     const [rotation, setRotation] = useState(0);
-    const [wheelItems, setWheelItems] = useState(exampleItems);
-    const [inputText, setInputText] = useState('');
+    const [wheelItems, setWheelItems] = useState(
+        exampleItems.map((label) => ({ label, weight: 1 }))
+    );
+    const [newLabel, setNewLabel] = useState('');
+    const [newWeight, setNewWeight] = useState('1');
     const [selectedItem, setSelectedItem] = useState(null);
     const [pointerColor, setPointerColor] = useState('rgb(239, 68, 68)');
+    const [labelDrafts, setLabelDrafts] = useState({});
+    const labelTimersRef = useRef({});
 
     // Audio
     const spinAudio = useRef(new Audio(spinningSound));
@@ -23,15 +28,87 @@ const SpinWheel = () => {
         );
     };
 
-    const colors = generateColors(wheelItems.length);
+    const normalizeWeight = (weight) => {
+        const value = Number(weight);
+        if (!Number.isFinite(value) || value <= 0) return 0;
+        return value;
+    };
+
+    const activeItems = wheelItems
+        .map((item, originalIndex) => ({
+            ...item,
+            originalIndex,
+            normalizedWeight: normalizeWeight(item.weight)
+        }))
+        .filter((item) => item.normalizedWeight > 0);
+
+    const colors = generateColors(activeItems.length || 1);
+
+    const totalActiveWeight = activeItems.reduce(
+        (sum, item) => sum + item.normalizedWeight,
+        0
+    );
+
+    let cumulativeAngle = 0;
+    const slices = totalActiveWeight > 0
+        ? activeItems.map((item, index) => {
+            const fraction = item.normalizedWeight / totalActiveWeight;
+            const sliceAngle = fraction * 360;
+            const startAngle = cumulativeAngle;
+            const endAngle = cumulativeAngle + sliceAngle;
+            cumulativeAngle = endAngle;
+
+            return {
+                item,
+                startAngle,
+                endAngle,
+                color: colors[index]
+            };
+        })
+        : [];
+
+    const pickWeightedIndex = (items) => {
+        if (!items.length) return -1;
+
+        const totalWeight = items.reduce(
+            (sum, item) => sum + item.normalizedWeight,
+            0
+        );
+        if (totalWeight <= 0) return -1;
+
+        const r = Math.random() * totalWeight;
+        let acc = 0;
+
+        for (let i = 0; i < items.length; i++) {
+            acc += items[i].normalizedWeight;
+            if (r < acc) {
+                return i;
+            }
+        }
+
+        return items.length - 1;
+    };
 
     const handleSpin = () => {
-        if (isSpinning) return;
+        if (isSpinning || !slices.length) return;
+
+        const winnerIndex = pickWeightedIndex(activeItems);
+        if (winnerIndex === -1) return;
+
+        const winnerSlice = slices[winnerIndex];
+        const sliceCenter =
+            (winnerSlice.startAngle + winnerSlice.endAngle) / 2;
+
+        const baseSpins = 360 * 5;
+        const pointerAngle = 270; // visual top of the SVG wheel
+        const normalizedRotation =
+            ((rotation % 360) + 360) % 360;
+        const rotationTarget =
+            ((pointerAngle - sliceCenter) % 360 + 360) % 360;
+        const offset = rotationTarget - normalizedRotation;
+        const finalRotation = rotation + baseSpins + offset;
 
         setIsSpinning(true);
-        const spinDegrees = (5 * 360) + Math.random() * 360;
-        const finalRotation = rotation + spinDegrees;
-
         // Play sound
         spinAudio.current.currentTime = 0;
         spinAudio.current.play();
@@ -39,45 +116,61 @@ const SpinWheel = () => {
         setRotation(finalRotation);
 
         setTimeout(() => {
-            const normalizedRotation = finalRotation % 360;
-            const sectorSize = 360 / wheelItems.length;
-            // Add 180 to account for items being reversed from visual rotation
-            let selectedIndex = Math.floor(((360 - (normalizedRotation % 360)) - 90) / sectorSize) % wheelItems.length;
-            if (selectedIndex < 0) {
-                selectedIndex = wheelItems.length - 1;
+            if (!slices.length || winnerIndex === -1) {
+                setIsSpinning(false);
+                spinAudio.current.pause();
+                spinAudio.current.currentTime = 0;
+                return;
             }
-            setSelectedItem(wheelItems[selectedIndex]);
-            setPointerColor(colors[selectedIndex]);
+
+            const { item, color } = slices[winnerIndex];
+
+            setSelectedItem(item.label);
+            setPointerColor(color);
             setIsSpinning(false);
             spinAudio.current.pause();
             spinAudio.current.currentTime = 0;
         }, 5000);
     };
 
-    const handleInputChange = (e) => {
-        const text = e.target.value;
-        setInputText(text);
-        
-        // If textbox is empty, use example items; otherwise parse user input
-        if (text.trim().length === 0) {
-            setWheelItems(exampleItems);
-        } else {
-            const items = text.split(/[,\n]/)
-                .map(item => item.trim())
-                .filter(item => item.length > 0);
-            setWheelItems(items.length > 0 ? items : exampleItems);
+    const handleAddItem = () => {
+        const label = newLabel.trim();
+        if (!label) return;
+
+        const weightNumber = Number(newWeight);
+        const weight =
+            Number.isFinite(weightNumber) && weightNumber !== 0
+                ? weightNumber
+                : 1;
+
+        setWheelItems((prev) => {
+            const usingDefaults =
+                prev.length === exampleItems.length &&
+                prev.every(
+                    (item, index) =>
+                        item.label === exampleItems[index] &&
+                        Number(item.weight) === 1
+                );
+
+            if (usingDefaults) {
+                return [{ label, weight }];
+            }
+
+            return [...prev, { label, weight }];
+        });
+        setNewLabel('');
+        setNewWeight('1');
+    };
+
+    const handleSubmitNewItem = (e) => {
+        if (e) {
+            e.preventDefault();
         }
+        handleAddItem();
     };
 
     return (
-        <div className="flex-1 flex flex-col justify-center items-center p-1 space-y-1 xl:p-4 xl:space-y-4">
-            <textarea
-                value={inputText}
-                onChange={handleInputChange}
-                className="w-full max-w-xs h-32 p-2 border rounded resize-none"
-                placeholder="Enter items (separated by commas or new lines)"
-            />
-
+        <div className="flex-1 flex flex-col justify-center items-center p-1 space-y-2 xl:p-4 xl:space-y-4">
             {/* Container */}
             <div className="relative w-64 h-64">
 
@@ -103,29 +196,33 @@ const SpinWheel = () => {
                         transition: `transform 5s cubic-bezier(0.2, 0.8, 0.2, 1)`
                     }}
                 >
-                    {wheelItems.map((item, i) => {
-                        const angle = (360 / wheelItems.length);
-                        const startAngle = (i * angle * Math.PI) / 180;
-                        const endAngle = ((i + 1) * angle * Math.PI) / 180;
-                        const largeArcFlag = angle > 180 ? 1 : 0;
+                    {slices.map(({ item, startAngle, endAngle, color }, i) => {
+                        const toRad = (deg) => (deg * Math.PI) / 180;
+
+                        const start = toRad(startAngle);
+                        const end = toRad(endAngle);
+
+                        const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
 
                         // Calculate points for the sector
-                        const x1 = 40 * Math.cos(startAngle);
-                        const y1 = 40 * Math.sin(startAngle);
-                        const x2 = 40 * Math.cos(endAngle);
-                        const y2 = 40 * Math.sin(endAngle);
+                        const x1 = 40 * Math.cos(start);
+                        const y1 = 40 * Math.sin(start);
+                        const x2 = 40 * Math.cos(end);
+                        const y2 = 40 * Math.sin(end);
 
                         // Calculate text position
-                        const textAngle = (startAngle + endAngle) / 2;
+                        const textAngle = toRad(
+                            (startAngle + endAngle) / 2
+                        );
                         const textRadius = 25; // Slightly inside the sector
                         const textX = textRadius * Math.cos(textAngle);
                         const textY = textRadius * Math.sin(textAngle);
 
                         return (
-                            <g key={i}>
+                            <g key={item.label + i}>
                                 <path
                                     d={`M 0 0 L ${x1} ${y1} A 40 40 0 ${largeArcFlag} 1 ${x2} ${y2} Z`}
-                                    fill={colors[i]}
+                                    fill={color}
                                     stroke="white"
                                     strokeWidth="0.5"
                                 />
@@ -137,9 +234,8 @@ const SpinWheel = () => {
                                     dominantBaseline="middle"
                                     fill="black"
                                     style={{ fontWeight: 'bold' }}
-                                    transform={`rotate(${(i * angle) + (angle / 2)}, ${textX}, ${textY})`}
                                 >
-                                    {item}
+                                    {item.label}
                                 </text>
                             </g>
                         );
@@ -151,9 +247,154 @@ const SpinWheel = () => {
 
             </div>
 
+            <div className="w-full max-w-xs text-sm space-y-1">
+                <div className="font-semibold">
+                    Items & weights
+                </div>
+                <div className="flex gap-2 mt-1">
+                    <input
+                        type="text"
+                        className="flex-1 px-2 py-1 border rounded text-sm"
+                        placeholder="Label"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                handleSubmitNewItem(e);
+                            }
+                        }}
+                    />
+                    <input
+                        type="number"
+                        className="w-20 px-2 py-1 border rounded text-sm text-right"
+                        value={newWeight}
+                        onChange={(e) => {
+                            const value = e.target.value;
+                            const num = Number(value);
+                            if (Number.isFinite(num) && num < 0) {
+                                setNewWeight('0');
+                            } else {
+                                setNewWeight(value);
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                handleSubmitNewItem(e);
+                            }
+                        }}
+                    />
+                    <button
+                        type="button"
+                        onClick={handleAddItem}
+                        className="px-3 py-1 text-sm font-semibold rounded border"
+                    >
+                        Add
+                    </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 mt-1">
+                    {wheelItems.map((item, index) => {
+                        const draftLabel =
+                            labelDrafts[index] !== undefined
+                                ? labelDrafts[index]
+                                : item.label;
+
+                        const commitLabel = (value) => {
+                            setWheelItems((prev) =>
+                                prev.map((it, i) =>
+                                    i === index ? { ...it, label: value } : it
+                                )
+                            );
+                            setLabelDrafts((prev) => {
+                                const next = { ...prev };
+                                delete next[index];
+                                return next;
+                            });
+                            if (labelTimersRef.current[index]) {
+                                clearTimeout(labelTimersRef.current[index]);
+                                delete labelTimersRef.current[index];
+                            }
+                        };
+
+                        const scheduleCommit = (value) => {
+                            if (labelTimersRef.current[index]) {
+                                clearTimeout(labelTimersRef.current[index]);
+                            }
+                            labelTimersRef.current[index] = setTimeout(() => {
+                                commitLabel(value);
+                            }, 3000);
+                        };
+
+                        return (
+                        <div
+                            key={item.label + index}
+                            className="flex items-center gap-2"
+                        >
+                            <input
+                                type="text"
+                                className="flex-1 px-1 py-0.5 border rounded text-xs"
+                                value={draftLabel}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    setLabelDrafts((prev) => ({
+                                        ...prev,
+                                        [index]: value,
+                                    }));
+                                    scheduleCommit(value);
+                                }}
+                                onBlur={(e) => {
+                                    const value = e.target.value;
+                                    commitLabel(value);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const value = e.currentTarget.value;
+                                        commitLabel(value);
+                                    }
+                                }}
+                            />
+                            <input
+                                type="number"
+                                className="w-16 px-1 py-0.5 border rounded text-right text-xs"
+                                value={item.weight}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    const num = Number(value);
+                                    setWheelItems((prev) =>
+                                        prev.map((it, i) =>
+                                            i === index
+                                                ? {
+                                                    ...it,
+                                                    weight:
+                                                        Number.isFinite(num) && num < 0
+                                                            ? 0
+                                                            : value,
+                                                }
+                                                : it
+                                        )
+                                    );
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="px-2 py-0.5 text-xs border rounded"
+                                onClick={() =>
+                                    setWheelItems((prev) =>
+                                        prev.filter((_, i) => i !== index)
+                                    )
+                                }
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        );
+                    })}
+                </div>
+            </div>
+
             <button
                 onClick={handleSpin}
-                disabled={isSpinning}
+                disabled={isSpinning || !slices.length}
                 className="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-colors"
             >
                 {isSpinning ? 'Spinning...' : 'Spin'}
